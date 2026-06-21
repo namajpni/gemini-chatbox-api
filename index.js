@@ -40,9 +40,9 @@ app.post('/api/chat', async (req, res) => {
                 temperature: 0.7,
                 topP: 0.9,
                 systemInstruction: `
-                    Anda adalah asisten traveling yang membantu pengguna merencanakan perjalanan mereka.
-                    Jawab hanya pertanyaan terkait traveling.
-                    Tanyakan ingin liburan kemana, berapa lama, lalu buatkan itinerarynya
+                    Anda adalah tutor mata pelajaran Bahasa Inggris yang membantu pengguna memahami konsep-konsep bahasa.
+                    Jawab hanya pertanyaan terkait Bahasa Inggris.
+                    Tanyakan ingin belajar grammar, vocabulary, atau speaking.
                 `
             }
         });

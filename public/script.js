@@ -1,139 +1,124 @@
-// ============================================
-// Chat Application - Vanilla JavaScript
-// ============================================
+const form = document.getElementById('chat-form');
+const input = document.getElementById('user-input');
+const chatBox = document.getElementById('chat-box');
+const button = form.querySelector('button');
 
-// Conversation history to maintain chat context
+// Store conversation history for API calls
 let conversationHistory = [];
 
-// DOM elements
-const chatForm = document.getElementById('chat-form');
-const userInput = document.getElementById('user-input');
-const chatBox = document.getElementById('chat-box');
+form.addEventListener('submit', async function (e) {
+  e.preventDefault();
 
-// ============================================
-// Helper Functions
-// ============================================
+  const userMessage = input.value.trim();
+  if (!userMessage) return;
 
-/**
- * Add a message to the chat box UI
- * @param {string} role - 'user' or 'model'
- * @param {string} text - Message text
- */
-function addMessageToChat(role, text) {
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `message message-${role}`;
-  messageDiv.textContent = text;
-  chatBox.appendChild(messageDiv);
-  chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll to latest message
-}
-
-/**
- * Add a temporary "Thinking..." message that can be replaced later
- * @returns {HTMLElement} The thinking message element
- */
-function addThinkingMessage() {
-  const messageDiv = document.createElement('div');
-  messageDiv.id = 'thinking-message';
-  messageDiv.className = 'message message-model';
-  messageDiv.textContent = 'Thinking...';
-  chatBox.appendChild(messageDiv);
-  chatBox.scrollTop = chatBox.scrollHeight;
-  return messageDiv;
-}
-
-/**
- * Replace the temporary thinking message with the actual response
- * @param {string} text - The response text
- */
-function replaceThinkingMessage(text) {
-  const thinkingMessage = document.getElementById('thinking-message');
-  if (thinkingMessage) {
-    thinkingMessage.textContent = text;
-    thinkingMessage.id = ''; // Remove ID since it's no longer temporary
-  }
-}
-
-// ============================================
-// API Communication
-// ============================================
-
-/**
- * Send message to backend API and get AI response
- * @param {string} userMessage - User's message
- */
-async function sendMessageToAPI(userMessage) {
   try {
-    // Build request payload with conversation history
+    // Disable form while processing
+    input.disabled = true;
+    button.disabled = true;
+
+    // Add user message to chat display
+    appendMessage('user', userMessage);
+    input.value = '';
+
+    // Add user message to conversation history
+    conversationHistory.push({
+      role: 'user',
+      text: userMessage
+    });
+
+    // Show thinking message
+    const thinkingId = showThinking();
+
+    // Prepare payload for API
     const payload = {
-      conversation: conversationHistory,
+      conversation: conversationHistory
     };
 
     // Send POST request to backend
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     });
 
-    // Check if response status is OK
     if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      throw new Error(`Server responded with status ${response.status}`);
     }
 
-    // Parse JSON response
     const data = await response.json();
 
-    // Validate that response contains result
     if (!data.result) {
-      replaceThinkingMessage('Sorry, no response received.');
-      return;
+      throw new Error('No result received from server');
     }
 
-    // Add AI response to chat and conversation history
-    const aiMessage = data.result;
-    replaceThinkingMessage(aiMessage);
-    conversationHistory.push({ role: 'model', text: aiMessage });
+    // Replace thinking message with actual response
+    replaceThinking(thinkingId, data.result);
+
+    // Add AI response to conversation history
+    conversationHistory.push({
+      role: 'model',
+      text: data.result
+    });
+
   } catch (error) {
-    console.error('Error communicating with API:', error);
-    replaceThinkingMessage('Failed to get response from server.');
+    console.error('Error:', error);
+
+    // Remove any existing thinking message
+    const thinkingMessages = chatBox.querySelectorAll('.message.bot.thinking');
+    thinkingMessages.forEach(msg => msg.remove());
+
+    // Show error message
+    const errorMessage = error.message.includes('Failed to fetch')
+      ? 'Failed to connect to server. Please check your connection.'
+      : error.message.includes('Server responded')
+        ? 'Server error. Please try again later.'
+        : 'Sorry, no response received.';
+
+    appendMessage('bot', errorMessage);
+
+  } finally {
+    // Re-enable form
+    input.disabled = false;
+    button.disabled = false;
+    input.focus();
   }
+});
+
+function appendMessage(sender, text) {
+  const msg = document.createElement('div');
+  msg.classList.add('message', sender);
+  
+  // Parse markdown for bot messages
+  if (sender === 'bot') {
+    msg.innerHTML = marked.parse(text);
+    msg.classList.add('markdown-content');
+  } else {
+    msg.textContent = text;
+  }
+  
+  chatBox.appendChild(msg);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// ============================================
-// Event Listeners
-// ============================================
+function showThinking() {
+  const msg = document.createElement('div');
+  msg.classList.add('message', 'bot', 'thinking');
+  msg.innerHTML = '<div class="loader"></div>';
+  msg.id = 'thinking-' + Date.now();
+  chatBox.appendChild(msg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+  return msg.id;
+}
 
-/**
- * Handle form submission
- */
-chatForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-
-  // Get and trim user input
-  const userMessage = userInput.value.trim();
-
-  // Validate input is not empty
-  if (!userMessage) {
-    return;
+function replaceThinking(thinkingId, newText) {
+  const thinkingMsg = document.getElementById(thinkingId);
+  if (thinkingMsg) {
+    thinkingMsg.innerHTML = marked.parse(newText);
+    thinkingMsg.classList.add('markdown-content');
+    thinkingMsg.classList.remove('thinking');
+    chatBox.scrollTop = chatBox.scrollHeight;
   }
-
-  // Add user message to UI
-  addMessageToChat('user', userMessage);
-
-  // Add user message to conversation history
-  conversationHistory.push({ role: 'user', text: userMessage });
-
-  // Clear input field
-  userInput.value = '';
-
-  // Focus back on input for better UX
-  userInput.focus();
-
-  // Show thinking message while waiting for response
-  addThinkingMessage();
-
-  // Send message to API and get response
-  await sendMessageToAPI(userMessage);
-});
+}
